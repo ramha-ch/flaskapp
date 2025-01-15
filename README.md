@@ -1,211 +1,219 @@
- 
-# Flask App with MySQL Docker Setup
+# Flask Application with MySQL using Docker
 
-This is a simple Flask app that interacts with a MySQL database. The app allows users to submit messages, which are then stored in the database and displayed on the frontend.
+This guide will walk you through the steps to set up a Flask application with MySQL using Docker, link the containers, and push the application image to Docker Hub.
+
+---
 
 ## Prerequisites
 
-Before you begin, make sure you have the following installed:
+- Docker installed on your system.
+- A Docker Hub account.
 
-- Docker
-- Git (optional, for cloning the repository)
+---
 
-## Setup
+## Installation Steps
 
-1. Clone this repository (if you haven't already):
-
-   ```bash
-   git clone https://github.com/your-username/your-repo-name.git
-   ```
-
-2. Navigate to the project directory:
-
-   ```bash
-   cd your-repo-name
-   ```
-
-3. Create a `.env` file in the project directory to store your MySQL environment variables:
-
-   ```bash
-   touch .env
-   ```
-
-4. Open the `.env` file and add your MySQL configuration:
-
-   ```
-   MYSQL_HOST=mysql
-   MYSQL_USER=your_username
-   MYSQL_PASSWORD=your_password
-   MYSQL_DB=your_database
-   ```
-
-## Usage
-
-1. Start the containers using Docker Compose:
-
-   ```bash
-   docker-compose up --build
-   ```
-
-2. Access the Flask app in your web browser:
-
-   - Frontend: http://localhost
-   - Backend: http://localhost:5000
-
-3. Create the `messages` table in your MySQL database:
-
-   - Use a MySQL client or tool (e.g., phpMyAdmin) to execute the following SQL commands:
-   
-     ```sql
-     CREATE TABLE messages (
-         id INT AUTO_INCREMENT PRIMARY KEY,
-         message TEXT
-     );
-     ```
-
-4. Interact with the app:
-
-   - Visit http://localhost to see the frontend. You can submit new messages using the form.
-   - Visit http://localhost:5000/insert_sql to insert a message directly into the `messages` table via an SQL query.
-
-## Cleaning Up
-
-To stop and remove the Docker containers, press `Ctrl+C` in the terminal where the containers are running, or use the following command:
+### Step 1: Install Docker
 
 ```bash
-docker-compose down
+sudo apt update
+sudo apt install docker.io
 ```
 
-## To run this two-tier application using  without docker-compose
+### Step 2: Verify Docker Installation
 
-- First create a docker image from Dockerfile
 ```bash
-docker build -t flaskapp .
+docker ps
 ```
 
-- Now, make sure that you have created a network using following command
+If you get a permission denied error, run:
+
+```bash
+sudo chown $USER /var/run/docker.sock
+```
+
+Alternatively:
+
+```bash
+sudo chown ubuntu /var/run/docker.sock
+```
+
+---
+
+## Setting Up the Application
+
+### Step 3: Clone the Repository
+
+```bash
+git clone <repository-url>
+```
+
+Remove any existing Dockerfile:
+
+```bash
+rm Dockerfile
+```
+
+Create a new Dockerfile:
+
+```bash
+vi Dockerfile
+```
+
+---
+
+## Dockerfile Content
+
+```dockerfile
+FROM python:3.9-slim # Use Python 3.9
+WORKDIR /app
+
+# Install required packages
+RUN apt-get update -y && \
+    apt-get upgrade -y && \
+    apt-get install -y gcc default-libmysqlclient-dev pkg-config
+
+# Copy application dependencies
+COPY requirements.txt .
+RUN pip install mysqlclient
+RUN pip install -r requirements.txt
+
+# Copy application source code
+COPY . .
+
+# Run the application
+CMD ["python", "app.py"]
+```
+
+---
+
+## Build and Run Docker Containers
+
+### Step 4: Build the Flask Application Image
+
+```bash
+docker build . -t flaskapp
+```
+
+### Step 5: Run the Flask Application Container
+
+```bash
+docker run -d -p 5000:5000 flaskapp:latest
+```
+
+### Step 6: Run MySQL Container
+
+```bash
+docker run -d -p 3306:3306 --name mysql \
+  -e MYSQL_ROOT_PASSWORD="admin" \
+  mysql:5.7
+```
+
+---
+
+## Linking Flask and MySQL Containers
+
+### Step 7: Create a Network
+
 ```bash
 docker network create twotier
 ```
 
-- Attach both the containers in the same network, so that they can communicate with each other
+### Step 8: Relaunch Containers on the Network
 
-i) MySQL container 
+Kill the existing containers:
+
 ```bash
-docker run -d \
-    --name mysql \
-    -v mysql-data:/var/lib/mysql \
-    --network=twotier \
-    -e MYSQL_DATABASE=mydb \
-    -e MYSQL_ROOT_PASSWORD=admin \
-    -p 3306:3306 \
-    mysql:5.7
-
+docker kill <mysql-container-id>
+docker kill <flaskapp-container-id>
 ```
-ii) Backend container
+
+Run the containers again:
+
+For Flask:
+
 ```bash
-docker run -d \
-    --name flaskapp \
-    --network=twotier \
-    -e MYSQL_HOST=mysql \
-    -e MYSQL_USER=root \
-    -e MYSQL_PASSWORD=admin \
-    -e MYSQL_DB=mydb \
-    -p 5000:5000 \
-    flaskapp:latest
-
+docker run -d -p 5000:5000 --network=twotier \
+  -e MYSQLHOST=mysql \
+  -e MYSQLUSER=admin \
+  -e MYSQL_ROOT_PASSWORD=admin \
+  -e MYSQL_DB=myDb \
+  --name=flaskapp flaskapp:latest
 ```
-## Setup  
 
-### 1. Clone the Repository  
-```bash  
-git clone https://github.com/your-username/your-repo-name.git  
-cd your-repo-name  
-2. Configure Environment Variables
-Create a .env file in the project directory:
+For MySQL:
 
-bash
-Copy code
-touch .env  
-Add the following variables to the .env file:
+```bash
+docker run -d -p 3306:3306 --network=twotier \
+  -e MYSQLHOST=mysql \
+  -e MYSQLUSER=admin \
+  -e MYSQL_ROOT_PASSWORD=admin \
+  -e MYSQL_DB=myDb \
+  --name=mysql mysql:5.7
+```
 
-env
-Copy code
-MYSQL_HOST=mysql  
-MYSQL_USER=your_username  
-MYSQL_PASSWORD=your_password  
-MYSQL_DB=your_database  
-3. Build and Run the Containers
-Use Docker Compose to build and start the application:
+---
 
-bash
-Copy code
-docker-compose up --build  
-4. Pull the Docker Image (Optional)
-If the image is already available on Docker Hub, you can pull it directly instead of building it:
+## Interact with the MySQL Container
 
-bash
-Copy code
-docker pull your-dockerhub-username/flask-mysql-app:latest  
-Then, run the container:
+### Step 9: Access MySQL Container
 
-bash
-Copy code
-docker run -d -p 5000:5000 --name flask-mysql-app your-dockerhub-username/flask-mysql-app:latest  
-Database Setup
-To create the messages table in your MySQL database, use a MySQL client or tool and execute the following SQL commands:
+```bash
+docker exec -it mysql bash
+```
 
-sql
-Copy code
-CREATE TABLE messages (  
-    id INT AUTO_INCREMENT PRIMARY KEY,  
-    message TEXT  
+Login to MySQL:
+
+```bash
+mysql -u root -p
+```
+
+Password: `admin`
+
+### Step 10: Create a Database Table
+
+Use the database:
+
+```sql
+USE myDb;
+```
+
+Create a table:
+
+```sql
+CREATE TABLE messages (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  message TEXT
 );
-
-1. Build the Docker Image
-Ensure your Dockerfile and application are correctly set up. Navigate to your project directory containing the Dockerfile. Then build the Docker image:
-
-bash
-Copy code
-docker build -t your-dockerhub-username/flask-mysql-app:latest .  
-Replace your-dockerhub-username with your Docker Hub username.
-latest can be replaced with a specific tag if needed.
-2. Run Tests and Verify
-Before pushing, make sure everything works as expected:
-
-bash
-Copy code
-docker run -d -p 5000:5000 your-dockerhub-username/flask-mysql-app:latest  
-3. Tag the Image
-Tag the Docker image with your Docker Hub username and repository name:
-
-bash
-Copy code
-docker tag your-dockerhub-username/flask-mysql-app:latest your-dockerhub-username/flask-mysql-app:version1.0  
-4. Push the Image to Docker Hub
-Push the tagged image to Docker Hub:
-
-bash
-Copy code
-docker push your-dockerhub-username/flask-mysql-app:version1.0  
-This will upload the Docker image to your Docker Hub repository under the specified tag (version1.0).
-
-Ensure that you have logged into Docker Hub by running:
-
-bash
-Copy code
-docker login  
-Use your Docker Hub username and password to authenticate.
-
-## Notes
-
-- Make sure to replace placeholders (e.g., `your_username`, `your_password`, `your_database`) with your actual MySQL configuration.
-
-- This is a basic setup for demonstration purposes. In a production environment, you should follow best practices for security and performance.
-
-- Be cautious when executing SQL queries directly. Validate and sanitize user inputs to prevent vulnerabilities like SQL injection.
-
-- If you encounter issues, check Docker logs and error messages for troubleshooting.
-
 ```
 
+---
+
+## Test the Application
+
+- Access the application on port `5000`.
+- Submit a message in the app.
+- Verify the message is saved in the database by querying the `messages` table.
+
+---
+
+## Push to Docker Hub
+
+### Step 11: Login to Docker Hub
+
+```bash
+docker login
+```
+
+Provide your username and password.
+
+### Step 12: Tag and Push the Image
+
+```bash
+docker tag flaskapp:latest <your-dockerhub-username>/flaskapp:latest
+docker push <your-dockerhub-username>/flaskapp:latest
+```
+
+---
+
+All done!
